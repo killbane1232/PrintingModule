@@ -3,7 +3,17 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.8.34525.116
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PrintingModule", "PrintingModule\PrintingModule.csproj", "{00CD9589-EDEC-4668-A3AE-8394E295237F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PrintingModule", "PrintingModule\PrintingModule.csproj", "{00CD9589-EDEC-4668-A3AE-8394E295237F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EDSTest", "EDSTest\EDSTest.csproj", "{20F844EE-298D-4D7B-B18A-BCF759D460B7}"
+	ProjectSection(ProjectDependencies) = postProject
+		{00CD9589-EDEC-4668-A3AE-8394E295237F} = {00CD9589-EDEC-4668-A3AE-8394E295237F}
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SignGCode", "SignGCode\SignGCode.csproj", "{92B11B3C-BB3A-4FEA-850B-A0442B8A32EE}"
+	ProjectSection(ProjectDependencies) = postProject
+		{00CD9589-EDEC-4668-A3AE-8394E295237F} = {00CD9589-EDEC-4668-A3AE-8394E295237F}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +25,14 @@ Global
 		{00CD9589-EDEC-4668-A3AE-8394E295237F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{00CD9589-EDEC-4668-A3AE-8394E295237F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{00CD9589-EDEC-4668-A3AE-8394E295237F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{20F844EE-298D-4D7B-B18A-BCF759D460B7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{20F844EE-298D-4D7B-B18A-BCF759D460B7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{20F844EE-298D-4D7B-B18A-BCF759D460B7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{20F844EE-298D-4D7B-B18A-BCF759D460B7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{92B11B3C-BB3A-4FEA-850B-A0442B8A32EE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{92B11B3C-BB3A-4FEA-850B-A0442B8A32EE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{92B11B3C-BB3A-4FEA-850B-A0442B8A32EE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{92B11B3C-BB3A-4FEA-850B-A0442B8A32EE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

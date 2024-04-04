@@ -3,7 +3,8 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.ReplyMarkups;
+using System.Text;
+using PrintingModule.EDS;
 
 namespace PrintingModule
 {
@@ -11,16 +12,11 @@ namespace PrintingModule
     {
         private readonly CancellationTokenSource cts;
         private readonly TelegramBotClient client;
-        private Dictionary<long, long> Users { get; set; } = [];
+        private readonly EDS.EDS? eds = null;
         private static TelegramBot? bot;
-        private static readonly Dictionary<long, MenuItem> UserState = [];
-        PrinterConnection connection = new PrinterConnection();
-        public enum MenuItem
-        {
-            Start,
-            Main,
-        }
-        public static TelegramBot getInstance()
+        readonly PrinterConnection connection = new();
+
+        public static TelegramBot GetInstance()
         {
             bot ??= new TelegramBot();
             return bot;
@@ -31,14 +27,24 @@ namespace PrintingModule
             var token = "";
             if (System.IO.File.Exists($"./telegram.config"))
             {
-                using (var reader = new StreamReader($"./telegram.config"))
-                {
-                    token = reader.ReadLine() ?? "";
-                }
+                using var reader = new StreamReader($"./telegram.config");
+                token = reader.ReadLine() ?? "";
             }
             cts = new CancellationTokenSource();
             client = new TelegramBotClient(token);
-            Users = new Dictionary<long, long>();
+
+            if (System.IO.File.Exists($"./eds.config"))
+            {
+                using var reader = new StreamReader($"./eds.config");
+
+                BigInteger p = new(reader.ReadLine(), 16);
+                BigInteger a = new(reader.ReadLine(), 10);
+                BigInteger b = new(reader.ReadLine(), 16);
+                byte[] xG = EDS.EDS.FromHexStringToByte(reader.ReadLine()!);
+                BigInteger n = new(reader.ReadLine(), 16);
+
+                eds = new EDS.EDS(p, a, b, n, xG);
+            }
 
             client.StartReceiving(new DefaultUpdateHandler(HandleUpdateAsync, HandleErrorAsync), null, cts.Token);
         }
@@ -46,29 +52,33 @@ namespace PrintingModule
         private Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
             var result = Task.CompletedTask;
-            switch (update.Type)
+
+            if (update.Message == null || update.Type != UpdateType.Message)
+                return result;
+
+            switch (update.Message.Type)
             {
-                case UpdateType.Message:
-                    if (update.Message != null && update.Message.Type == MessageType.Text)
-                        try
-                        {
-                            result = MessageHandler(update);
-                        }
-                        catch (Exception ex)
-                        {
-                            result = client.SendTextMessageAsync(update.Message.Chat.Id,
-                                "Произошла какая-то ошибка!", replyMarkup: new ReplyKeyboardRemove());
-                        }
-                    if (update.Message != null && update.Message.Type == MessageType.Document)
-                        try
-                        {
-                            result = DocumentHandler(update);
-                        }
-                        catch (Exception ex)
-                        {
-                            result = client.SendTextMessageAsync(update.Message.Chat.Id,
-                                "Произошла какая-то ошибка!", replyMarkup: new ReplyKeyboardRemove());
-                        }
+                case MessageType.Text:
+                    try
+                    {
+                        result = MessageHandler(update.Message);
+                    }
+                    catch
+                    {
+                        result = client.SendTextMessageAsync(update.Message.Chat.Id, "Произошла какая-то ошибка!",
+                            cancellationToken: cancellationToken);
+                    }
+                    break;
+                case MessageType.Document:
+                    try
+                    {
+                        result = DocumentHandler(update.Message);
+                    }
+                    catch
+                    {
+                        result = client.SendTextMessageAsync(update.Message.Chat.Id, "Произошла какая-то ошибка!",
+                            cancellationToken: cancellationToken);
+                    }
                     break;
                 default:
                     result = Task.CompletedTask;
@@ -80,7 +90,7 @@ namespace PrintingModule
 
         private Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
         {
-            var errorMessage = exception switch
+            _ = exception switch
             {
                 ApiRequestException apiRequestException => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}",
                 _ => exception.ToString()
@@ -89,56 +99,61 @@ namespace PrintingModule
             return Task.CompletedTask;
         }
 
-        private Task DocumentHandler(Update update)
+        private Task DocumentHandler(Message msg)
         {
-            var msg = update.Message;
-
             if (msg.Document != null)
             {
-                //if (UserState[msg.Chat.Id] == MenuItem.Main)
+                var fileThread = client.GetFileAsync(msg.Document.FileId);
+                fileThread.Wait();
+                var res = fileThread.Result;
+
+                using (FileStream stream = new("temp.gcode", FileMode.Create))
                 {
-                    var fileThread = client.GetFileAsync(msg.Document.FileId);
-                    fileThread.Wait();
-                    var res = fileThread.Result;
-                    using (FileStream stream = new FileStream("temp.gcode", FileMode.OpenOrCreate))
-                    {
-                        var dowThread = client.DownloadFileAsync(res.FilePath, stream);
-                        dowThread.Wait();
-                    }
-                    List<string> data = [];
-                    using (StreamReader reader = new StreamReader("temp.gcode"))
-                    {
-                        while (!reader.EndOfStream)
-                        {
-                            var str = reader.ReadLine();
-                            var commentIdx = str.IndexOf(';');
-                            if (commentIdx == 0)
-                                continue;
-                            if (commentIdx != -1)
-                            {
-                                str.Substring(0, commentIdx);
-                            }
-                            if (string.IsNullOrWhiteSpace(str))
-                                continue;
-                            data.Add(str);
-                        }
-                    }
-                    var task = new Thread(() =>
-                    {
-                        client.SendTextMessageAsync(msg.Chat.Id, connection.Print(data));
-                    });
-                    task.Start();
-                    return client.SendTextMessageAsync(msg.Chat.Id, "Printing");
+                    var dowThread = client.DownloadFileAsync(res.FilePath!, stream);
+                    dowThread.Wait();
                 }
+                List<string> data = [];
+
+                var text = System.IO.File.ReadAllLines("temp.gcode");
+                var sign = text[0];
+                var publicKey = text[1];
+
+                var allBytesStr = new StringBuilder();
+                for (var i = 2; i < text.Length; i++)
+                {
+                    var str = text[i];
+                    allBytesStr.AppendLine(str);
+                    var commentIdx = str!.IndexOf(';');
+                    if (commentIdx == 0)
+                        continue;
+                    if (commentIdx != -1)
+                    {
+                        str = str[..commentIdx];
+                    }
+                    if (string.IsNullOrWhiteSpace(str))
+                        continue;
+                    data.Add(str);
+                }
+
+                Stribog stribog = new(Stribog.Mode.m512);
+                if (!eds!.VerifyDS(stribog.GetHash(allBytesStr.ToString().Select(x => (byte)x).ToArray()), sign, new CECPoint(publicKey)))
+                {
+                    return client.SendTextMessageAsync(msg.Chat.Id, "Wrong EDS please sign file");
+                }
+
+                var task = new Thread(() =>
+                {
+                    client.SendTextMessageAsync(msg.Chat.Id, connection.Print(data));
+                });
+                task.Start();
+                return client.SendTextMessageAsync(msg.Chat.Id, "Printing");
             }
             return Task.CompletedTask;
         }
 
-        private Task MessageHandler(Update update)
+        private Task MessageHandler(Message msg)
         {
-            var msg = update.Message;
-
-            if (msg == null || msg.From == null || msg.Text == null)
+            if (msg.From == null || msg.Text == null)
                 return Task.CompletedTask;
 
             var result = Task.CompletedTask;
@@ -147,53 +162,20 @@ namespace PrintingModule
             {
                 case "/start":
                     result = client.SendTextMessageAsync(msg.Chat.Id,
-                        "Добрый день! Введите логин пользователя для входа:");
-                    UserState[msg.Chat.Id] = MenuItem.Start;
+                        "Добрый день! Приложите файл с расширением gcode, содержащий электронную подпись, для отправки на печать.");
                     break;
                 case "/stop":
-                    Users.Remove(Users.First(x => x.Value == msg.Chat.Id).Key);
                     result = client.SendTextMessageAsync(msg.Chat.Id,
-                        "Регистрация успешно удалена.");
+                        "Регистрация удалена.");
                     break;
                 case "/status":
                     result = client.SendTextMessageAsync(msg.Chat.Id,
                         $"{Math.Round(connection.pecentage, 2)}%");
                     break;
-                default:
-                    if (!UserState.ContainsKey(msg.Chat.Id))
-                    {
-                        client.SendStickerAsync(msg.Chat.Id, InputFile.FromFileId("CAACAgIAAxkBAAIBmWFf8Ia0tHtyLUI9Pg2cfe2Pz87tAAIuAwACtXHaBqoozbmcyVK2IQQ"));
-                        break;
-                    }
-                    switch (UserState[msg.Chat.Id])
-                    {
-                        case MenuItem.Start:
-                            if (!UpdateUserTgId(msg.Text, msg.Chat.Id))
-                            {
-                                result = client.SendTextMessageAsync(msg.Chat.Id,
-                                    "Неверный логин");
-                                break;
-                            }
-                            result = client.SendTextMessageAsync(msg.Chat.Id,
-                                "Добро пожаловать!\n");
-                            UserState[msg.Chat.Id] = MenuItem.Main;
-                            break;
-                        default:
-                            client.SendStickerAsync(msg.Chat.Id, InputFile.FromFileId("CAACAgIAAxkBAAIBmWFf8Ia0tHtyLUI9Pg2cfe2Pz87tAAIuAwACtXHaBqoozbmcyVK2IQQ"));
-                            break;
-                    }
-                    break;
 
             }
 
             return result;
-        }
-
-
-        public bool UpdateUserTgId(string login, long chatId)
-        {
-
-            return true;
         }
     }
 }

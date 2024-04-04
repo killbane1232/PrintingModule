@@ -7,8 +7,8 @@ namespace PrintingModule
 
         bool printing = false;
         SerialPort _serialPort;
-        Semaphore semaphore = new Semaphore(0, 1);
-        public object locker = new object();
+        Semaphore semaphore = new(0, 1);
+        public object locker = new();
         public double pecentage = 0;
         double cnt = 0;
         bool gotOk = false;

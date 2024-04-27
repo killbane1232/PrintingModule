@@ -122,7 +122,7 @@
             {
                 b.genRandomBits(255, new Random((int)DateTime.Now.Ticks));
             }
-            while (LegendreSymbol(b, q) == 1);
+            while (b.modPow((q - 1) / 2, q) == 1);//вычисление символа Лежандра.
 
             BigInteger s = 0;
             BigInteger t = q - 1;
@@ -146,12 +146,6 @@
                 c = c.modPow(2, q);
             }
             return r;
-        }
-
-        //вычисление символа Лежандра.
-        private static BigInteger LegendreSymbol(BigInteger a, BigInteger q)
-        {
-            return a.modPow((q - 1) / 2, q);
         }
 
         //дополнить подпись нулями слева до длины n, 

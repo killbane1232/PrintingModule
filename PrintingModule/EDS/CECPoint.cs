@@ -17,15 +17,6 @@
             fieldChar = new();
         }
 
-        public CECPoint(CECPoint p)
-        {
-            a = p.a;
-            b = p.b;
-            x = p.x;
-            y = p.y;
-            fieldChar = p.fieldChar;
-        }
-
         public CECPoint(string str)
         {
             var arr = str.Split('$');
